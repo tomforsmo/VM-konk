@@ -1,6 +1,19 @@
 <!DOCTYPE html>
+
 <html lang="no">
 <head>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-051R2GWFD7"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-051R2GWFD7');
+  </script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bodø kommunes VM-konge 2026</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bodø kommunes VM-konge 2026</title>
@@ -102,7 +115,6 @@
     <button class="fane-knapp" onclick="byttFane('resultat-fane', this)">📊 Leaderboard</button>
   </div>
 
-  <!-- FANE 1 -->
   <div id="grupper-fane" class="fane-innhold aktiv">
     <section>
       <h2>Hvordan ender gruppene?</h2>
@@ -116,7 +128,6 @@
     <button id="knapp-lagre-grupper" class="lagre-knapp" onclick="lagreGruppetips()">Send inn mine Gruppespill- & Bonus-tips</button>
   </div>
 
-  <!-- FANE 2 -->
   <div id="kamper-fane" class="fane-innhold">
     <section>
       <h2>Dagens utvalgte VM-kamper</h2>
@@ -130,7 +141,6 @@
     </section>
   </div>
 
-  <!-- FANE 3 -->
   <div id="resultat-fane" class="fane-innhold">
     <section>
       <h2>VM Lederliste Live</h2>
@@ -152,7 +162,6 @@
     </section>
   </div>
 
-  <!-- POPUP-MODAL FOR SPIONERING -->
   <div id="spion-modal" class="modal">
     <div class="modal-innhold">
       <span class="lukk-knapp" onclick="lukkSpionModal()">&times;</span>
@@ -254,7 +263,7 @@
       oppdaterInnloggingsGrensesnitt();
 
       try {
-        const { data: tabellData } = await supabase.from('tabelltips').select('*').eq('bruker_id', navn);
+        const { data: tabellData } = await supabase.from('tabelltips').select('*').range(0, 9999).eq('bruker_id', navn);
         if (tabellData && tabellData.length > 0) {
           Object.keys(vmGrupper).forEach(gNavn => {
             const lagForGruppe = tabellData.filter(d => d.gruppe === gNavn).sort((a,b) => a.tippet_plassering - b.tippet_plassering);
@@ -262,7 +271,7 @@
           });
         }
         
-        const { data: bonusData } = await supabase.from('bonus_svar').select('*').eq('bruker_id', navn);
+        const { data: bonusData } = await supabase.from('bonus_svar').select('*').range(0, 9999).eq('bruker_id', navn);
         if (bonusData && bonusData.length > 0) {
           bonusData.forEach(b => {
             const felt = document.getElementById(`q-${b.sporsmal_nr - 1}`);
@@ -270,7 +279,7 @@
           });
         }
 
-        const { data: kampTipsData } = await supabase.from('kamp_tips').select('*').eq('bruker_id', navn);
+        const { data: kampTipsData } = await supabase.from('kamp_tips').select('*').range(0, 9999).eq('bruker_id', navn);
         if (kampTipsData && kampTipsData.length > 0) {
           kampTipsData.forEach(t => {
             const hFelt = document.getElementById(`hjemme-${t.kamp_id}`);
@@ -358,7 +367,7 @@
 
             kList.innerHTML += `
               <div class="kamp-kort">
-                <div class="kamp-info"><span>Kamp #${k.id}</span><span>Dato: ${datoVisning}</span></div>
+                <div class="kamp-info"><span>Camp #${k.id}</span><span>Dato: ${datoVisning}</span></div>
                 <div class="kamp-rekke">
                   <span class="lag-navn-kamp lag-venstre">${k.hjemmelag}</span>
                   <input type="number" min="0" class="score-input" id="hjemme-${k.id}" placeholder="-" ${kampFristUtlopt ? 'disabled' : ''}>
@@ -437,11 +446,12 @@
       const tbody = document.getElementById('leaderboard-body');
       if (!tbody) return;
       try {
+        // --- ENDRING HER: .range(0, 9999) tvinger Supabase til å spytte ut mer enn standarden på 1000 rader ---
         const [rKamper, rTips, rTabeller, rBonus] = await Promise.all([
           supabase.from('kamper').select('*'),
-          supabase.from('kamp_tips').select('*'),
-          supabase.from('tabelltips').select('*'),
-          supabase.from('bonus_svar').select('*')
+          supabase.from('kamp_tips').select('*').range(0, 9999),
+          supabase.from('tabelltips').select('*').range(0, 9999),
+          supabase.from('bonus_svar').select('*').range(0, 9999)
         ]);
 
         const kamper = rKamper.data || [];
@@ -451,13 +461,31 @@
         // Lagrer i globale variabler slik at spionen har tilgang
         cacheTabellTips = alleTabellTips;
         cacheBonusSvar = rBonus.data || [];
+        cacheCampaignTips = tips;
         cacheKampTips = tips;
 
+        const spillere = {};
+        const sjekkSpiller = (n) => { 
+          if (!n) return;
+          if (!spillere[n]) spillere[n] = { navn: n, kampP: 0, gruppeP: 0 }; 
+        };
+
+        // REGISTRERING: Tving inn absolutt alle spillere som finnes i databasen MED EN GANG
+        tips.forEach(t => sjekkSpiller(t.bruker_id));
+        alleTabellTips.forEach(t => sjekkSpiller(t.bruker_id));
+        cacheBonusSvar.forEach(b => sjekkSpiller(b.bruker_id));
+
+        // Bygg kampfasit
         const kampFasit = {};
-        kamper.forEach(k => { if (k.faktisk_hjemme !== null && k.faktisk_hjemme !== "") kampFasit[k.id] = { h: k.faktisk_hjemme, b: k.faktisk_borte }; });
+        kamper.forEach(k => { 
+          if (k.faktisk_hjemme !== null && k.faktisk_hjemme !== "") {
+            kampFasit[k.id] = { h: k.faktisk_hjemme, b: k.faktisk_borte }; 
+          }
+        });
 
         const adminBruker = "FASIT";
 
+        // Bygg gruppefasit
         const gruppeFasit = {};
         const fasitRader = alleTabellTips.filter(t => t.bruker_id === adminBruker);
         fasitRader.forEach(t => {
@@ -465,22 +493,23 @@
           gruppeFasit[t.gruppe][t.lag_navn] = t.tippet_plassering;
         });
 
-        const spillere = {};
-        const sjekkSpiller = (n) => { if (!spillere[n]) spillere[n] = { navn: n, kampP: 0, gruppeP: 0 }; };
-
+        // Beregn kamppoeng
         tips.forEach(t => {
-          const f = kampFasit[t.kamp_id]; if (!f) return;
-          sjekkSpiller(t.bruker_id);
+          const f = kampFasit[t.kamp_id]; 
+          if (!f) return; 
+          
           let p = 0;
           if (t.tippet_hjemme === f.h) p += 1;
           if (t.tippet_borte === f.b) p += 1;
           if ((f.h > f.b && t.tippet_hjemme > t.tippet_borte) || (f.h < f.b && t.tippet_hjemme < t.tippet_borte) || (f.h === f.b && t.tippet_hjemme === t.tippet_borte)) p += 1;
           if ((f.h - f.b) === (t.tippet_hjemme - t.tippet_borte)) p += 1;
-          spillere[t.bruker_id].kampP += p;
+          
+          if (spillere[t.bruker_id]) {
+            spillere[t.bruker_id].kampP += p;
+          }
         });
 
-        alleTabellTips.forEach(t => { sjekkSpiller(t.bruker_id); });
-
+        // Beregn gruppepoeng
         if (gruppeFasit["Gruppe A"]) {
           const brukerGrupper = {};
           alleTabellTips.forEach(t => {
@@ -495,6 +524,7 @@
           });
 
           Object.keys(brukerGrupper).forEach(bId => {
+            if (!spillere[bId]) return;
             Object.keys(brukerGrupper[bId]).forEach(gNavn => {
               const antallRette = brukerGrupper[bId][gNavn];
               if (antallRette === 4) spillere[bId].gruppeP += 6;
@@ -505,22 +535,44 @@
           });
         }
 
+        // Fjern admin/fasit-brukeren fra visningen 
         if (spillere[adminBruker]) delete spillere[adminBruker];
 
-        const liste = Object.values(spillere).sort((a,b) => (b.kampP + b.gruppeP) - (a.kampP + a.gruppeP));
-        tbody.innerHTML = liste.length === 0 ? "<tr><td colspan='5' class='laster-tekst'>Ingen poeng registrert enda.</td></tr>" : "";
-        
+        // Sortering: Flest poeng øverst. Hvis helt likt (0 poeng), sorter alfabetisk på navn.
+        const liste = Object.values(spillere).sort((a, b) => {
+          const totaltA = a.kampP + a.gruppeP;
+          const totaltB = b.kampP + b.gruppeP;
+          
+          if (totaltB !== totaltA) {
+            return totaltB - totaltA;
+          }
+          return a.navn.localeCompare(b.navn);
+        });
+
+        // STABIL UTTEGNING AV TABELLEN
+        if (liste.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='5' class='laster-tekst'>Ingen deltakere funnet i databasen enda.</td></tr>";
+          return;
+        }
+
+        let htmlInnhold = "";
         liste.forEach((s, idx) => {
-          tbody.innerHTML += `
+          htmlInnhold += `
             <tr>
-              <td class="nr-plass">${idx+1}.</td>
+              <td class="nr-plass">${idx + 1}.</td>
               <td><span class="spiller-navn-lenke" onclick="window.visSpillerTips('${s.navn}')">${s.navn}</span></td>
               <td class="poeng-kolonne">${s.kampP}</td>
               <td class="poeng-kolonne">${s.gruppeP}</td>
               <td class="poeng-sum">${s.kampP + s.gruppeP} p</td>
             </tr>`;
         });
-      } catch (e) { tbody.innerHTML = `<tr><td colspan='5'>Feil under beregning: ${e.message}</td></tr>`; }
+
+        tbody.innerHTML = htmlInnhold;
+
+      } catch (e) { 
+        console.error(e);
+        tbody.innerHTML = `<tr><td colspan='5'>Feil under beregning: ${e.message}</td></tr>`; 
+      }
     }
 
     // --- FUNKSJON FOR Å SPIONERE PÅ ANDRE SPILLERE ---
@@ -565,7 +617,7 @@
       // 3. Kamptips
       const kDiv = document.getElementById('spion-kamper');
       kDiv.innerHTML = '';
-      const sKamper = cacheKampTips.filter(k => k.bruker_id === spillerNavn).sort((a,b) => a.kamp_id - b.kamp_id);
+      const sKamper = cacheCampaignTips ? cacheCampaignTips.filter(k => k.bruker_id === spillerNavn) : cacheKampTips.filter(k => k.bruker_id === spillerNavn);
       if(sKamper.length === 0) {
         kDiv.innerHTML = '<p style="font-style:italic; font-size:12px; color:#94a3b8;">Ingen kamptips levert enda.</p>';
       } else {
@@ -589,19 +641,15 @@
       document.getElementById('spion-modal').style.display = 'none';
     }
 
-    // Lukk vinduet om de klikker utenfor boksen
     window.onclick = function(event) {
       const modal = document.getElementById('spion-modal');
       if (event.target == modal) { modal.style.display = 'none'; }
     }
 
     // Initiering
-    tebtGrupper();
+    tegnGrupper();
     tegnSporsmal();
     hentKamperOgHistorikk();
-    
-    // Feilretting av skrivefeil i initiering (tebtGrupper -> tegnGrupper)
-    function tebtGrupper() { tegnGrupper(); }
 
     const lNavn = localStorage.getItem('vm_bruker');
     if (lNavn) { 
