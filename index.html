@@ -389,18 +389,33 @@ if (kampTipsData && kampTipsData.length > 0)
           });
         }
 
-        const hList = document.getElementById('historikk-liste');
+     const hList = document.getElementById('historikk-liste');
         if (hList) {
           hList.innerHTML = historiske.length === 0 ? "<p class='undertekst'>Ingen spilte kamper enda.</p>" : "";
           historiske.forEach(k => {
+            // Hent innlogget brukers tips for akkurat denne historiske kampen
+            let brukerTipsTekst = "Ikke tippet";
+            if (innloggetBruker && window.cacheKampTips) {
+              const mittTips = window.cacheKampTips.find(t => t.kamp_id === k.id && t.bruker_id === innloggetBruker);
+              if (mittTips) {
+                brukerTipsTekst = `${mittTips.tippet_hjemme} - ${mittTips.tippet_borte}`;
+              }
+            } else if (!innloggetBruker) {
+              brukerTipsTekst = "Logg inn for å se ditt tips";
+            }
+
             hList.innerHTML += `
               <div class="kamp-kort historisk">
+                <div class="kamp-info"><span>Kamp #${k.id}</span></div>
                 <div class="kamp-rekke">
-                  <span class="lag-navn-kamp lag-venstre">${k.hjemmelag}</span>
+                  <span class="lag-navn-camp lag-venstre">${k.hjemmelag}</span>
                   <span class="skille">-</span>
-                  <span class="lag-navn-kamp lag-hoyre">${k.bortelag}</span>
+                  <span class="lag-navn-camp lag-hoyre">${k.bortelag}</span>
                 </div>
-                <div class="status-resultat">Sluttresultat: ${k.faktisk_hjemme} - ${k.faktisk_borte}</div>
+                <div class="status-resultat" style="display: flex; justify-content: space-between; padding: 6px 12px; background: #0f172a;">
+                  <span>Sluttresultat: <strong>${k.faktisk_hjemme} - ${k.faktisk_borte}</strong></span>
+                  <span style="color: #38bdf8;">Ditt tips: <strong>${brukerTipsTekst}</strong></span>
+                </div>
               </div>`;
           });
         }
